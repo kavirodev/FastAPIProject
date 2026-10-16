@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KaviroAPI</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 30px 16px;
+            font-family: Arial, sans-serif;
+            background: #0b1020;
+            color: #f1f5f9;
+        }
+
+        main {
+            max-width: 1000px;
+            margin: auto;
+        }
+
+        h1 {
+            color: #a5b4fc;
+        }
+
+        h2 {
+            font-size: 20px;
+        }
+
+        p {
+            color: #94a3b8;
+        }
+
+        a {
+            color: #a5b4fc;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 18px;
+        }
+
+        section {
+            padding: 22px;
+            margin: 18px 0;
+            background: #151d31;
+            border: 1px solid #293550;
+            border-radius: 16px;
+        }
+
+        input {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #34415e;
+            border-radius: 8px;
+            background: #0b1020;
+            color: white;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: #818cf8;
+        }
+
+        button {
+            padding: 10px 14px;
+            margin: 4px 2px;
+            border: none;
+            border-radius: 8px;
+            background: #818cf8;
+            color: #101329;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #a5b4fc;
+        }
+
+        .secondary {
+            background: #293550;
+            color: white;
+        }
+
+        .item {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 0;
+            border-bottom: 1px solid #293550;
+        }
+
+        .item span {
+            flex: 1;
+            min-width: 100px;
+            overflow-wrap: anywhere;
+        }
+
+        .empty {
+            color: #94a3b8;
+        }
+
+        #result {
+            min-height: 50px;
+            padding: 14px;
+            border-radius: 10px;
+            background: #080c16;
+            color: #c7d2fe;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+        }
+
+        .status {
+            font-size: 14px;
+            color: #94a3b8;
+        }
+
+        @media (max-width: 500px) {
+            body {
+                padding: 16px 10px;
+            }
+
+            section {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+<main>
+    <h1>Task & Movie API</h1>
+    <p>Управляй задачами и любимыми фильмами в одном месте.</p>
+
+    <p>
+        <a href="/docs" target="_blank">Открыть документацию Swagger</a>
+    </p>
+
+    <div class="grid">
+        <section>
+            <h2>Аккаунт</h2>
+
+            <input
+                id="username"
+                type="text"
+                minlength="3"
+                placeholder="Имя пользователя"
+            >
+
+            <input
+                id="password"
+                type="password"
+                minlength="6"
+                placeholder="Пароль"
+            >
+
+            <button onclick="auth('register')">
+                Регистрация
+            </button>
+
+            <button onclick="auth('login')">
+                Войти
+            </button>
+
+            <button class="secondary" onclick="logout()">
+                Выйти
+            </button>
+
+            <p class="status" id="accountStatus">
+                Вы не вошли в аккаунт.
+            </p>
+        </section>
+
+        <section>
+            <h2>Добавить задачу</h2>
+
+            <input
+                id="taskTitle"
+                type="text"
+                placeholder="Например, изучить FastAPI"
+            >
+
+            <button onclick="addTask()">
+                Добавить задачу
+            </button>
+
+            <button class="secondary" onclick="loadTasks()">
+                Обновить
+            </button>
+
+            <h2>Добавить фильм</h2>
+
+            <input
+                id="movieTitle"
+                type="text"
+                placeholder="Название фильма"
+            >
+
+            <button onclick="addMovie()">
+                Добавить фильм
+            </button>
+
+            <button class="secondary" onclick="loadMovies()">
+                Обновить
+            </button>
+        </section>
+    </div>
+
+    <div class="grid">
+        <section>
+            <h2>Мои задачи</h2>
+            <div id="tasks">
+                <p class="empty">Войди, чтобы увидеть задачи.</p>
+            </div>
+        </section>
+
+        <section>
+            <h2>Любимые фильмы</h2>
+            <div id="movies">
+                <p class="empty">Войди, чтобы увидеть фильмы.</p>
+            </div>
+        </section>
+    </div>
+
+    <section>
+        <h2>Ответ сервера</h2>
+        <pre id="result">API готов к работе.</pre>
+    </section>
+</main>
+
+<script>
+    let token = sessionStorage.getItem("apiToken") || "";
+
+    const result = document.getElementById("result");
+
+    function show(data) {
+        result.textContent =
+            typeof data === "string"
+                ? data
+                : JSON.stringify(data, null, 2);
+    }
+
+    async function api(path, method = "GET", body = null) {
+        const headers = {};
+
+        if (token) {
+            headers["Authorization"] = "Bearer " + token;
+        }
+
+        if (body !== null) {
+            headers["Content-Type"] = "application/json";
+        }
+
+        const response = await fetch(path, {
+            method: method,
+            headers: headers,
+            body: body === null ? null : JSON.stringify(body)
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+            throw new Error(
+                data.detail || data.error || "HTTP " + response.status
+            );
+        }
+
+        return data;
+    }
+
+    // Регистрация и вход
+    async function auth(action) {
+        try {
+            const username =
+                document.getElementById("username").value.trim();
+
+            const password =
+                document.getElementById("password").value;
+
+            const data = await api("/" + action, "POST", {
+                username: username,
+                password: password
+            });
+
+            if (action === "login") {
+                token = data.access_token;
+
+                sessionStorage.setItem("apiToken", token);
+
+                document.getElementById("accountStatus").textContent =
+                    "Вы вошли в аккаунт: " + username;
+
+                await loadTasks();
+                await loadMovies();
+            }
+
+            show(data);
+        } catch (error) {
+            show(error.message);
+        }
+    }
+
+    // Выход
+    async function logout() {
+        try {
+            if (token) {
+                await api("/logout", "POST");
+            }
+        } catch (error) {
+            show(error.message);
+        }
+
+        token = "";
+        sessionStorage.removeItem("apiToken");
+
+        document.getElementById("accountStatus").textContent =
+            "Вы не вошли в аккаунт.";
+
+        document.getElementById("tasks").replaceChildren();
+        document.getElementById("movies").replaceChildren();
+
+        show("Вы вышли из аккаунта.");
+    }
+
+    // Добавление задачи
+    async function addTask() {
+        try {
+            const title =
+                document.getElementById("taskTitle").value.trim();
+
+            if (!title) {
+                throw new Error("Введите название задачи.");
+            }
+
+            const data = await api("/api/tasks", "POST", {
+                title: title
+            });
+
+            document.getElementById("taskTitle").value = "";
+
+            show(data);
+            await loadTasks();
+        } catch (error) {
+            show(error.message);
+        }
+    }
+
+    // Получение задач
+    async function loadTasks() {
+        try {
+            const data = await api("/api/tasks");
+            const container = document.getElementById("tasks");
+
+            container.replaceChildren();
+
+            if (data.tasks.length === 0) {
+                container.innerHTML =
+                    '<p class="empty">Задач пока нет.</p>';
+                return;
+            }
+
+            data.tasks.forEach(task => {
+                const item = document.createElement("div");
+                item.className = "item";
+
+                const title = document.createElement("span");
+
+                title.textContent =
+                    `#${task.id} ${task.completed ? "✓" : "○"} ${task.title}`;
+
+                const editButton = document.createElement("button");
+                editButton.textContent = "Изменить";
+
+                editButton.onclick = async () => {
+                    const newTitle = prompt(
+                        "Название задачи:",
+                        task.title
+                    );
+
+                    if (newTitle === null || !newTitle.trim()) {
+                        return;
+                    }
+
+                    const completed = confirm(
+                        "Задача выполнена? OK — да, Отмена — нет."
+                    );
+
+                    try {
+                        const updated = await api(
+                            `/api/tasks/${task.id}`,
+                            "PUT",
+                            {
+                                title: newTitle.trim(),
+                                completed: completed
+                            }
+                        );
+
+                        show(updated);
+                        await loadTasks();
+                    } catch (error) {
+                        show(error.message);
+                    }
+                };
+
+                const deleteButton = document.createElement("button");
+                deleteButton.textContent = "Удалить";
+                deleteButton.className = "secondary";
+
+                deleteButton.onclick = async () => {
+                    if (!confirm("Удалить эту задачу?")) {
+                        return;
+                    }
+
+                    try {
+                        show(await api(
+                            `/api/tasks/${task.id}`,
+                            "DELETE"
+                        ));
+
+                        await loadTasks();
+                    } catch (error) {
+                        show(error.message);
+                    }
+                };
+
+                item.append(title, editButton, deleteButton);
+                container.appendChild(item);
+            });
+        } catch (error) {
+            show(error.message);
+        }
+    }
+
+    // Добавление фильма
+    async function addMovie() {
+        try {
+            const title =
+                document.getElementById("movieTitle").value.trim();
+
+            if (!title) {
+                throw new Error("Введите название фильма.");
+            }
+
+            const data = await api(
+                "/api/favorite-movies",
+                "POST",
+                { title: title }
+            );
+
+            document.getElementById("movieTitle").value = "";
+
+            show(data);
+            await loadMovies();
+        } catch (error) {
+            show(error.message);
+        }
+    }
+
+    // Получение фильмов
+    async function loadMovies() {
+        try {
+            const data = await api("/api/favorite-movies");
+
+            const container = document.getElementById("movies");
+            container.replaceChildren();
+
+            if (data.favorite_movies.length === 0) {
+                container.innerHTML =
+                    '<p class="empty">Фильмов пока нет.</p>';
+                return;
+            }
+
+            data.favorite_movies.forEach(movie => {
+                const item = document.createElement("div");
+                item.className = "item";
+
+                const title = document.createElement("span");
+                title.textContent = `#${movie.id} ${movie.title}`;
+
+                const editButton = document.createElement("button");
+                editButton.textContent = "Изменить";
+
+                editButton.onclick = async () => {
+                    const newTitle = prompt(
+                        "Название фильма:",
+                        movie.title
+                    );
+
+                    if (newTitle === null || !newTitle.trim()) {
+                        return;
+                    }
+
+                    try {
+                        show(await api(
+                            `/api/favorite-movies/${movie.id}`,
+                            "PUT",
+                            { title: newTitle.trim() }
+                        ));
+
+                        await loadMovies();
+                    } catch (error) {
+                        show(error.message);
+                    }
+                };
+
+                const deleteButton = document.createElement("button");
+                deleteButton.textContent = "Удалить";
+                deleteButton.className = "secondary";
+
+                deleteButton.onclick = async () => {
+                    if (!confirm("Удалить фильм?")) {
+                        return;
+                    }
+
+                    try {
+                        show(await api(
+                            `/api/favorite-movies/${movie.id}`,
+                            "DELETE"
+                        ));
+
+                        await loadMovies();
+                    } catch (error) {
+                        show(error.message);
+                    }
+                };
+
+                item.append(title, editButton, deleteButton);
+                container.appendChild(item);
+            });
+        } catch (error) {
+            show(error.message);
+        }
+    }
+
+    // Восстановление состояния интерфейса
+    if (token) {
+        document.getElementById("accountStatus").textContent =
+            "Найден сохранённый токен. Проверь авторизацию.";
+
+        loadTasks();
+        loadMovies();
+    }
+</script>
+</body>
+</html>
